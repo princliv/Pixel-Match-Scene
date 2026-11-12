@@ -34,6 +34,285 @@ export function HeroFigure({ level, size = "lg" }: { level: GameLevel; size?: "s
   );
 }
 
+export function MascotFigure({
+  mood,
+  size = "md",
+  className = "",
+}: {
+  mood: "happy" | "sad";
+  size?: "sm" | "md" | "lg";
+  className?: string;
+}) {
+  const isHappy = mood === "happy";
+  const sizeMap = {
+    sm: "size-20",
+    md: "size-36 sm:size-44",
+    lg: "size-48 sm:size-60",
+  };
+  const dims = sizeMap[size];
+
+  return (
+    <div className={`relative inline-flex items-center justify-center ${dims} ${className}`}>
+      {/* Background Aura / Glow */}
+      <div
+        className={`pointer-events-none absolute inset-2 rounded-full blur-2xl transition-all duration-700 ${
+          isHappy
+            ? "bg-hero-mint/30 shadow-[0_0_80px_var(--hero-mint)]"
+            : "bg-destructive/25 shadow-[0_0_70px_var(--destructive)]"
+        }`}
+      />
+
+      <svg
+        viewBox="0 0 200 200"
+        className={`relative z-10 size-full ${isHappy ? "mascot-happy" : "mascot-sad"}`}
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        role="img"
+        aria-label={isHappy ? "Happy Mascot: Level Crossed" : "Sad Mascot: Level Not Crossed"}
+      >
+        <defs>
+          <linearGradient id="bodyGradHappy" x1="100" y1="30" x2="100" y2="170" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#1e3a5f" />
+            <stop offset="100%" stopColor="#0d1b2a" />
+          </linearGradient>
+          <linearGradient id="bodyGradSad" x1="100" y1="30" x2="100" y2="170" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#2c2834" />
+            <stop offset="100%" stopColor="#14141d" />
+          </linearGradient>
+          <linearGradient id="visorGrad" x1="100" y1="65" x2="100" y2="135" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#07131e" />
+            <stop offset="100%" stopColor="#0a0e14" />
+          </linearGradient>
+          <radialGradient id="ringGlowHappy" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#54d4c5" stopOpacity="0.8" />
+            <stop offset="100%" stopColor="#54d4c5" stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id="ringGlowSad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#f87171" stopOpacity="0.7" />
+            <stop offset="100%" stopColor="#f87171" stopOpacity="0" />
+          </radialGradient>
+          <filter id="glowEffect" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        {/* Hover thruster shadow at base */}
+        <ellipse
+          cx="100"
+          cy="182"
+          rx="44"
+          ry="9"
+          fill={isHappy ? "url(#ringGlowHappy)" : "url(#ringGlowSad)"}
+          className="opacity-70"
+        />
+
+        {/* Happy Sparkles floating around */}
+        {isHappy && (
+          <g className="sparkle-twinkle">
+            <path
+              d="M 32 36 Q 32 46 22 46 Q 32 46 32 56 Q 32 46 42 46 Q 32 46 32 36 Z"
+              fill="#f2c14e"
+            />
+            <path
+              d="M 168 32 Q 168 40 160 40 Q 168 40 168 48 Q 168 40 176 40 Q 168 40 168 32 Z"
+              fill="#54d4c5"
+            />
+            <circle cx="178" cy="95" r="3.5" fill="#f2c14e" />
+            <circle cx="24" cy="98" r="3" fill="#54d4c5" />
+          </g>
+        )}
+
+        {/* Sad Droplets / Sparks */}
+        {!isHappy && (
+          <g className="opacity-60">
+            <circle cx="28" cy="48" r="2.5" fill="#f87171" className="opacity-50" />
+            <circle cx="172" cy="52" r="2" fill="#94a3b8" className="opacity-40" />
+          </g>
+        )}
+
+        {/* Left Antenna */}
+        {isHappy ? (
+          <g>
+            <path d="M 68 54 L 46 26" stroke="#54d4c5" strokeWidth="4.5" strokeLinecap="round" />
+            <circle cx="44" cy="24" r="8" fill="#f2c14e" filter="url(#glowEffect)" />
+            <circle cx="44" cy="24" r="4" fill="#ffffff" />
+            <circle cx="44" cy="24" r="13" stroke="#54d4c5" strokeWidth="1.5" strokeDasharray="3 3" className="signal-pulse" />
+          </g>
+        ) : (
+          <g>
+            <path d="M 66 58 Q 50 64 36 68" stroke="#64748b" strokeWidth="4" strokeLinecap="round" />
+            <circle cx="34" cy="69" r="6" fill="#f87171" className="opacity-80" />
+            <circle cx="34" cy="69" r="2.5" fill="#ffffff" />
+          </g>
+        )}
+
+        {/* Right Antenna */}
+        {isHappy ? (
+          <g>
+            <path d="M 132 54 L 154 26" stroke="#54d4c5" strokeWidth="4.5" strokeLinecap="round" />
+            <circle cx="156" cy="24" r="8" fill="#f2c14e" filter="url(#glowEffect)" />
+            <circle cx="156" cy="24" r="4" fill="#ffffff" />
+            <circle cx="156" cy="24" r="13" stroke="#54d4c5" strokeWidth="1.5" strokeDasharray="3 3" className="signal-pulse" />
+          </g>
+        ) : (
+          <g>
+            <path d="M 134 58 Q 150 64 164 68" stroke="#64748b" strokeWidth="4" strokeLinecap="round" />
+            <circle cx="166" cy="69" r="6" fill="#f87171" className="opacity-80" />
+            <circle cx="166" cy="69" r="2.5" fill="#ffffff" />
+          </g>
+        )}
+
+        {/* Floating Side Hands / Pods */}
+        {isHappy ? (
+          <g>
+            <g transform="translate(24, 96)">
+              <rect x="0" y="0" width="16" height="24" rx="8" fill="#1e3a5f" stroke="#54d4c5" strokeWidth="2.5" />
+              <path d="M 8 2 L 8 -6" stroke="#54d4c5" strokeWidth="4" strokeLinecap="round" />
+              <circle cx="8" cy="-7" r="3" fill="#f2c14e" />
+            </g>
+            <g transform="translate(160, 96)">
+              <rect x="0" y="0" width="16" height="24" rx="8" fill="#1e3a5f" stroke="#54d4c5" strokeWidth="2.5" />
+              <path d="M 8 2 L 8 -6" stroke="#54d4c5" strokeWidth="4" strokeLinecap="round" />
+              <circle cx="8" cy="-7" r="3" fill="#f2c14e" />
+            </g>
+          </g>
+        ) : (
+          <g className="opacity-75">
+            <rect x="26" y="118" width="14" height="22" rx="7" fill="#2c2834" stroke="#64748b" strokeWidth="2" />
+            <rect x="160" y="118" width="14" height="22" rx="7" fill="#2c2834" stroke="#64748b" strokeWidth="2" />
+          </g>
+        )}
+
+        {/* Mascot Main Chassis / Head */}
+        <rect
+          x="44"
+          y="44"
+          width="112"
+          height="106"
+          rx="36"
+          fill={isHappy ? "url(#bodyGradHappy)" : "url(#bodyGradSad)"}
+          stroke={isHappy ? "#54d4c5" : "#e05260"}
+          strokeWidth="3.5"
+        />
+
+        {/* Visor Bezel & Screen */}
+        <rect
+          x="54"
+          y="58"
+          width="92"
+          height="76"
+          rx="24"
+          fill="url(#visorGrad)"
+          stroke={isHappy ? "#72e2d5" : "#475569"}
+          strokeWidth="2"
+        />
+
+        {/* Visor Scanline details */}
+        <line x1="58" y1="72" x2="142" y2="72" stroke={isHappy ? "#54d4c5" : "#475569"} strokeWidth="1" strokeOpacity="0.18" />
+        <line x1="58" y1="86" x2="142" y2="86" stroke={isHappy ? "#54d4c5" : "#475569"} strokeWidth="1" strokeOpacity="0.18" />
+        <line x1="58" y1="100" x2="142" y2="100" stroke={isHappy ? "#54d4c5" : "#475569"} strokeWidth="1" strokeOpacity="0.18" />
+        <line x1="58" y1="114" x2="142" y2="114" stroke={isHappy ? "#54d4c5" : "#475569"} strokeWidth="1" strokeOpacity="0.18" />
+
+        {/* FACIAL EXPRESSIONS */}
+        {isHappy ? (
+          <g>
+            {/* Happy Eyes - Sparkling Upward Arcs */}
+            <path
+              d="M 68 90 C 68 76, 88 76, 88 90"
+              stroke="#54d4c5"
+              strokeWidth="5.5"
+              strokeLinecap="round"
+              fill="none"
+              filter="url(#glowEffect)"
+            />
+            <path
+              d="M 112 90 C 112 76, 132 76, 132 90"
+              stroke="#54d4c5"
+              strokeWidth="5.5"
+              strokeLinecap="round"
+              fill="none"
+              filter="url(#glowEffect)"
+            />
+            {/* Eye sparkle highlights */}
+            <circle cx="78" cy="80" r="2.5" fill="#ffffff" />
+            <circle cx="122" cy="80" r="2.5" fill="#ffffff" />
+
+            {/* Glowing Cheeks */}
+            <ellipse cx="68" cy="99" rx="6" ry="3.5" fill="#ff79c6" fillOpacity="0.55" />
+            <ellipse cx="132" cy="99" rx="6" ry="3.5" fill="#ff79c6" fillOpacity="0.55" />
+
+            {/* Beaming Happy Smile */}
+            <path
+              d="M 88 102 Q 100 118 112 102"
+              stroke="#f2c14e"
+              strokeWidth="4.5"
+              strokeLinecap="round"
+              fill="#f2c14e"
+              fillOpacity="0.25"
+            />
+          </g>
+        ) : (
+          <g>
+            {/* Sad Eyes - Drooping Inward/Downward Arcs */}
+            <path
+              d="M 68 84 C 70 96, 86 96, 88 84"
+              stroke="#f87171"
+              strokeWidth="5"
+              strokeLinecap="round"
+              fill="none"
+            />
+            <path
+              d="M 112 84 C 114 96, 130 96, 132 84"
+              stroke="#f87171"
+              strokeWidth="5"
+              strokeLinecap="round"
+              fill="none"
+            />
+
+            {/* Subtle worry brows */}
+            <path d="M 68 76 L 84 80" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeOpacity="0.8" />
+            <path d="M 132 76 L 116 80" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeOpacity="0.8" />
+
+            {/* Sad Frowning Mouth */}
+            <path
+              d="M 89 114 Q 100 103 111 114"
+              stroke="#f87171"
+              strokeWidth="4"
+              strokeLinecap="round"
+              fill="none"
+            />
+
+            {/* Cyan Digital Teardrop dripping from left eye */}
+            <g className="tear-drip">
+              <path
+                d="M 72 96 C 72 96 68 106 68 110 C 68 113.5 70.5 116 73.5 116 C 76.5 116 79 113.5 79 110 C 79 106 75 96 75 96 Z"
+                fill="#54d4c5"
+                filter="url(#glowEffect)"
+              />
+              <circle cx="72.5" cy="111" r="1.5" fill="#ffffff" />
+            </g>
+          </g>
+        )}
+
+        {/* Chassis Chest Indicator / Core */}
+        <rect
+          x="88"
+          y="138"
+          width="24"
+          height="6"
+          rx="3"
+          fill={isHappy ? "#54d4c5" : "#e05260"}
+          className={isHappy ? "animate-pulse" : ""}
+        />
+      </svg>
+    </div>
+  );
+}
+
 function StatusMark({ status }: { status: LevelStatus }) {
   if (status === "locked") return <LockKeyhole className="size-4" aria-hidden="true" />;
   if (status === "complete") return <Check className="size-4" aria-hidden="true" />;

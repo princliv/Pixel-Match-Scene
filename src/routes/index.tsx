@@ -8,13 +8,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { HeroFigure, GridMap, SceneBackdrop, hueStyles } from "@/components/game-ui";
+import { HeroFigure, GridMap, SceneBackdrop, MascotFigure, hueStyles } from "@/components/game-ui";
 import {
   artwork, arenaQuestions, levels, premiumFormula, transactionValueFormula, universeFactors, valuationSteps,
+  getShuffledQuestionsForLevel, getShuffledQuestionsForArena,
   type GameLevel, type GameQuestion,
 } from "@/data/game-content";
 import {
-  ARENA_PASS_MARK, calculateArenaScore, canEnterArena, createInitialProgress,
+  ARENA_PASS_MARK, isLevelPassed, calculateArenaScore, canEnterArena, createInitialProgress,
   recordLevelResult, scoreAnswer, type GameProgress,
 } from "@/data/game-progress";
 
@@ -32,7 +33,7 @@ export const Route = createFileRoute("/")({
   component: TransactionTitans,
 });
 
-type Screen = "title" | "story" | "hub" | "gate" | "video" | "quiz" | "unlock" | "arena" | "arena-results" | "certificate";
+type Screen = "title" | "story" | "hub" | "gate" | "video" | "quiz" | "unlock" | "level-result" | "arena" | "arena-results" | "certificate";
 const STORAGE_KEY = "transaction-titans-progress-v1";
 
 function TransactionTitans() {
@@ -51,6 +52,7 @@ function TransactionTitans() {
   const [levelAnswers, setLevelAnswers] = useState<boolean[]>([]);
   const [arenaAnswers, setArenaAnswers] = useState<boolean[]>([]);
   const [score, setScore] = useState(0);
+  const [shuffledQuestions, setShuffledQuestions] = useState<GameQuestion[]>([]);
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [videoElapsed, setVideoElapsed] = useState(0);
   const [captions, setCaptions] = useState(true);
@@ -94,9 +96,20 @@ function TransactionTitans() {
   const xp = completedCount * 500 + progress.levels.reduce((sum, item) => sum + item.bestScore * 25, 0);
   const active = levels[activeLevel] ?? levels[0]!;
   const arenaOpen = canEnterArena(progress);
-  const currentQuestion: GameQuestion | undefined = screen === "arena" ? arenaQuestions[quizIndex] : active?.questions[quizIndex];
+  const currentQuestion: GameQuestion | undefined =
+    shuffledQuestions[quizIndex] ??
+    (screen === "arena" ? arenaQuestions[quizIndex] : active?.questions[quizIndex]);
   const currentStatus = progress.levels[activeLevel]?.status;
   const restored = Math.round((completedCount / levels.length) * 100);
+
+  // Fallback: Ensure active questions options are shuffled whenever entering quiz or arena
+  useEffect(() => {
+    if (screen === "quiz" && shuffledQuestions.length === 0 && active) {
+      setShuffledQuestions(getShuffledQuestionsForLevel(active));
+    } else if (screen === "arena" && shuffledQuestions.length === 0) {
+      setShuffledQuestions(getShuffledQuestionsForArena());
+    }
+  }, [screen, active, shuffledQuestions.length]);
 
   const playTone = (kind: "click" | "correct" | "wrong" | "unlock" = "click") => {
     if (!soundOn) return;
@@ -134,34 +147,9 @@ function TransactionTitans() {
       setScreen("story");
     }
   };
-  const openLevel = (index: number) => {
-    if (index === 4) {
-      if (!arenaOpen) return;
-      setScreen("arena");
-      setQuizIndex(0);
-      setSelected([]);
-      setAnswered(null);
-      setRetryUsed(false);
-      setArenaAnswers([]);
-      setScore(0);
-      playTone();
-      return;
-    }
-    if (progress.levels[index]?.status === "locked") return;
-    setActiveLevel(index);
-    updateProgress({ ...progress, currentLevel: index + 1 });
-    setScreen("gate");
-    playTone();
-  };
-  const startVideo = () => {
-    updateProgress({ ...progress, levels: progress.levels.map((item, index) => index === activeLevel ? { ...item, status: "in_progress" } : item) });
-    setVideoElapsed(0);
-    setVideoPlaying(false);
-    setScreen("video");
-  };
-  const markVideoWatched = () => {
-    updateProgress({ ...progress, levels: progress.levels.map((item, index) => index === activeLevel ? { ...item, videoWatched: true, status: "in_progress" } : item) });
-    setVideoPlaying(false);
+
+  const startLevelQuiz = (levelToPlay: GameLevel = active) => {
+    setShuffledQuestions(getShuffledQuestionsForLevel(levelToPlay));
     setQuizIndex(0);
     setLevelAnswers([]);
     setSelected([]);
@@ -170,11 +158,51 @@ function TransactionTitans() {
     setScreen("quiz");
     playTone();
   };
+
+  const startArenaQuiz = () => {
+    setShuffledQuestions(getShuffledQuestionsForArena());
+    setQuizIndex(0);
+    setSelected([]);
+    setAnswered(null);
+    setRetryUsed(false);
+    setArenaAnswers([]);
+    setScore(0);
+    setScreen("arena");
+    playTone();
+  };
+
+  const openLevel = (index: number) => {
+    if (index === 4) {
+      if (!arenaOpen) return;
+      startArenaQuiz();
+      return;
+    }
+    if (progress.levels[index]?.status === "locked") return;
+    setActiveLevel(index);
+    updateProgress({ ...progress, currentLevel: index + 1 });
+    setScreen("gate");
+    playTone();
+  };
+
+  const startVideo = () => {
+    updateProgress({ ...progress, levels: progress.levels.map((item, index) => index === activeLevel ? { ...item, status: "in_progress" } : item) });
+    setVideoElapsed(0);
+    setVideoPlaying(false);
+    setScreen("video");
+  };
+
+  const markVideoWatched = () => {
+    updateProgress({ ...progress, levels: progress.levels.map((item, index) => index === activeLevel ? { ...item, videoWatched: true, status: "in_progress" } : item) });
+    setVideoPlaying(false);
+    startLevelQuiz(active);
+  };
+
   const toggleAnswer = (answer: string) => {
     if (answered !== null) return;
     setSelected((current) => current.includes(answer) ? current.filter((item) => item !== answer) : currentQuestion?.type === "multi" ? [...current, answer] : [answer]);
     playTone();
   };
+
   const submitAnswer = () => {
     if (!currentQuestion || selected.length === 0 || answered !== null) return;
     const correct = scoreAnswer(selected, currentQuestion.correctAnswers, currentQuestion.type);
@@ -182,6 +210,7 @@ function TransactionTitans() {
     setStreak((value) => correct ? value + 1 : 0);
     playTone(correct ? "correct" : "wrong");
   };
+
   const advanceQuestion = () => {
     if (!currentQuestion || answered === null) return;
     if (!answered && !retryUsed) {
@@ -194,7 +223,9 @@ function TransactionTitans() {
     if (screen === "arena") setArenaAnswers(nextAnswers);
     else setLevelAnswers(nextAnswers);
     const nextIndex = quizIndex + 1;
-    const totalQuestions = screen === "arena" ? arenaQuestions.length : active.questions.length;
+    const totalQuestions = screen === "arena"
+      ? (shuffledQuestions.length || arenaQuestions.length)
+      : (shuffledQuestions.length || active.questions.length);
     if (nextIndex < totalQuestions) {
       setQuizIndex(nextIndex);
       setSelected([]);
@@ -206,19 +237,17 @@ function TransactionTitans() {
     setScore(finalScore);
     if (screen === "arena") {
       updateProgress({ ...progress, finalScore, commanderName: progress.commanderName });
+      playTone(finalScore >= ARENA_PASS_MARK ? "unlock" : "wrong");
       setScreen("arena-results");
     } else {
       const updated = recordLevelResult(progress, activeLevel, finalScore);
       updateProgress(updated);
-      if (finalScore >= ARENA_PASS_MARK) {
-        playTone("unlock");
-        setScreen("unlock");
-      } else {
-        setToast("Mission needs another run · 4/5 required");
-        setScreen("gate");
-      }
+      const passed = isLevelPassed(finalScore, totalQuestions);
+      playTone(passed ? "unlock" : "wrong");
+      setScreen("level-result");
     }
   };
+
   const resetProgress = () => {
     const fresh = createInitialProgress();
     updateProgress(fresh);
@@ -303,12 +332,39 @@ function TransactionTitans() {
         {screen === "title" && <TitleScreen hasProgress={progress.introSeen || completedCount > 0} completedCount={completedCount} onStart={beginStory} onContinue={() => setScreen("hub")} />}
         {screen === "story" && <StoryScreen panel={introPanel} onNext={() => { if (introPanel < 2) setIntroPanel(introPanel + 1); else { updateProgress({ ...progress, introSeen: true }); setScreen("hub"); } }} onSkip={() => { updateProgress({ ...progress, introSeen: true }); setScreen("hub"); }} />}
         {screen === "hub" && <HubScreen progress={progress} statuses={mapStatuses} restored={restored} xp={xp} arenaOpen={arenaOpen} onSelect={openLevel} />}
-        {screen === "gate" && <LevelGate level={active} status={currentStatus ?? "available"} onBack={() => setScreen("hub")} onStart={startVideo} onReplay={() => { setVideoElapsed(0); setScreen("video"); }} watched={progress.levels[activeLevel]?.videoWatched ?? false} />}
+        {screen === "gate" && <LevelGate level={active} status={currentStatus ?? "available"} onBack={() => setScreen("hub")} onStart={progress.levels[activeLevel]?.videoWatched ? () => startLevelQuiz(active) : startVideo} onReplay={() => { setVideoElapsed(0); setScreen("video"); }} watched={progress.levels[activeLevel]?.videoWatched ?? false} />}
         {screen === "video" && <VideoStage level={active} elapsed={videoElapsed} playing={videoPlaying} captions={captions} watched={progress.levels[activeLevel]?.videoWatched ?? false} onBack={() => setScreen("gate")} onPlay={() => setVideoPlaying((value) => !value)} onReplay={() => { setVideoElapsed(0); setVideoPlaying(false); }} onCaptions={() => setCaptions((value) => !value)} onWatched={markVideoWatched} />}
         {screen === "quiz" && currentQuestion && <QuizStage level={active} question={currentQuestion} index={quizIndex} selected={selected} answered={answered} retryUsed={retryUsed} streak={streak} onSelect={toggleAnswer} onSubmit={submitAnswer} onAdvance={advanceQuestion} />}
-        {screen === "unlock" && <UnlockScreen level={active} score={score} allComplete={arenaOpen} onContinue={() => setScreen("hub")} onArena={() => { setScreen("hub"); setTimeout(() => openLevel(4), 0); }} />}
+        {(screen === "level-result" || screen === "unlock") && (
+          <LevelResultScreen
+            level={active}
+            score={score}
+            totalQuestions={active.questions.length}
+            allComplete={arenaOpen}
+            hasNextSector={activeLevel < levels.length - 1}
+            nextLevel={levels[activeLevel + 1]}
+            onRetry={() => startLevelQuiz(active)}
+            onNextSector={() => {
+              if (activeLevel < levels.length - 1) {
+                openLevel(activeLevel + 1);
+              } else {
+                openLevel(4);
+              }
+            }}
+            onGrid={() => setScreen("hub")}
+            onArena={() => openLevel(4)}
+          />
+        )}
         {screen === "arena" && currentQuestion && <ArenaStage question={currentQuestion} index={quizIndex} selected={selected} answered={answered} retryUsed={retryUsed} arenaAnswers={arenaAnswers} onSelect={toggleAnswer} onSubmit={submitAnswer} onAdvance={advanceQuestion} />}
-        {screen === "arena-results" && <ArenaResults score={progress.finalScore ?? score} name={progress.commanderName} onName={(name) => updateProgress({ ...progress, commanderName: name })} onContinue={() => setScreen((progress.finalScore ?? score) >= ARENA_PASS_MARK ? "certificate" : "hub")} />}
+        {screen === "arena-results" && (
+          <ArenaResults
+            score={progress.finalScore ?? score}
+            name={progress.commanderName}
+            onName={(name) => updateProgress({ ...progress, commanderName: name })}
+            onContinue={() => setScreen((progress.finalScore ?? score) >= ARENA_PASS_MARK ? "certificate" : "hub")}
+            onRetry={startArenaQuiz}
+          />
+        )}
         {screen === "certificate" && <Certificate name={progress.commanderName} score={progress.finalScore ?? score} onBack={() => setScreen("hub")} onDownload={downloadCertificate} />}
       </div>
 
@@ -391,8 +447,206 @@ function QuizStage({ level, question, index, selected, answered, retryUsed, stre
   })}</div>{answered !== null && <div role="status" className={`mt-5 border-l-2 p-4 ${answered ? "border-hero-mint bg-hero-mint/5" : "border-hero-coral bg-hero-coral/5"}`}><p className="flex items-center gap-2 text-sm font-semibold">{answered ? <><Check className="size-4 text-hero-mint" />Correct. You are ready to continue.</> : <><RotateCcw className="size-4 text-hero-coral" />{retryUsed ? "Not quite — review the concept." : "Not quite — one retry available."}</>}</p><p className="mt-2 text-sm leading-6 text-muted-foreground">{question.explanation}</p>{question.type === "multi" && <p className="mt-2 text-xs text-muted-foreground">Correct choices are marked with a check; incorrect selections show an X.</p>}</div>}<div className="mt-6 flex justify-end">{answered === null ? <Button onClick={onSubmit} disabled={selected.length === 0} className="rounded-sm px-6 text-xs font-bold uppercase tracking-[.12em]">Submit answer<ArrowRight className="size-4" /></Button> : <Button onClick={onAdvance} className="rounded-sm px-6 text-xs font-bold uppercase tracking-[.12em]">{!answered && !retryUsed ? "Try once more" : index === 4 ? "Finish mission" : "Next question"}<ArrowRight className="size-4" /></Button>}</div></div><p className="mt-4 text-center text-[10px] text-muted-foreground">Pass mark · 4 / 5</p></section>;
 }
 
-function UnlockScreen({ level, score, allComplete, onContinue, onArena }: { level: GameLevel; score: number; allComplete: boolean; onContinue: () => void; onArena: () => void }) {
-  return <section className="sweep-in mx-auto flex min-h-[70vh] max-w-3xl flex-col items-center justify-center py-10 text-center"><div className="relative flex size-48 items-center justify-center rounded-full border border-primary/60 bg-primary/5 shadow-[0_0_90px_color-mix(in_oklab,var(--primary)_20%,transparent)] sm:size-60"><div className="absolute inset-4 rounded-full border border-dashed border-energy/50" /><div className="absolute inset-0 animate-ping rounded-full border border-energy/30 [animation-duration:2.3s]" /><HeroFigure level={level} size="md" /></div><div className="mt-7 flex flex-wrap justify-center gap-2">{[0, 1, 2, 3, 4].map((item) => <span key={item} className={`size-2 rounded-full ${item < score ? "bg-hero-gold shadow-[0_0_12px_var(--hero-gold)]" : "bg-muted"}`} />)}</div><p className="mt-5 text-[10px] font-bold uppercase tracking-[.2em] text-primary">Mission unlocked · Badge earned</p><h1 className="display-font mt-2 text-3xl font-bold sm:text-5xl">{level.hero}</h1><p className="mt-3 text-sm text-muted-foreground">Sector 0{level.number} restored · {score}/5</p>{allComplete && <div className="mt-6 border border-primary/40 bg-primary/5 px-5 py-4"><p className="text-[10px] font-bold uppercase tracking-[.17em] text-primary">Four-badge sequence complete</p><p className="display-font mt-2 text-xl font-bold">Final Assessment Arena unlocked</p></div>}<Button onClick={allComplete ? onArena : onContinue} className="mt-7 h-11 rounded-sm px-7 text-xs font-bold uppercase tracking-[.12em]">{allComplete ? "Enter the Arena" : "Continue to the Grid"}<ArrowRight className="size-4" /></Button><div className="mt-5 flex justify-center gap-2 text-xl text-hero-gold">{levels.map((item) => <span key={item.number} className={item.number <= level.number ? "opacity-100" : "opacity-20"}>{item.emblem}</span>)}</div></section>;
+function LevelResultScreen({
+  level,
+  score,
+  totalQuestions,
+  allComplete,
+  hasNextSector,
+  nextLevel,
+  onRetry,
+  onNextSector,
+  onGrid,
+  onArena,
+}: {
+  level: GameLevel;
+  score: number;
+  totalQuestions: number;
+  allComplete: boolean;
+  hasNextSector: boolean;
+  nextLevel?: GameLevel | undefined;
+  onRetry: () => void;
+  onNextSector: () => void;
+  onGrid: () => void;
+  onArena: () => void;
+}) {
+  const percentage = Math.round((score / totalQuestions) * 100);
+  const passed = isLevelPassed(score, totalQuestions);
+  const hue = hueStyles[level.hue];
+
+  return (
+    <section className="sweep-in mx-auto flex min-h-[72vh] max-w-3xl flex-col items-center justify-center py-8 text-center">
+      {/* Result Status Badge */}
+      <div
+        className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-bold uppercase tracking-[.18em] backdrop-blur ${
+          passed
+            ? "border-hero-mint/60 bg-hero-mint/15 text-hero-mint shadow-[0_0_20px_color-mix(in_oklab,var(--hero-mint)_25%,transparent)]"
+            : "border-destructive/60 bg-destructive/15 text-destructive shadow-[0_0_20px_color-mix(in_oklab,var(--destructive)_25%,transparent)]"
+        }`}
+      >
+        {passed ? (
+          <>
+            <Check className="size-4" />
+            <span>Level Crossed · {percentage}%</span>
+          </>
+        ) : (
+          <>
+            <X className="size-4" />
+            <span>Level Not Crossed · {percentage}%</span>
+          </>
+        )}
+      </div>
+
+      {/* Mascot with Happy / Sad expression */}
+      <div className="relative mb-3 mt-6">
+        <MascotFigure mood={passed ? "happy" : "sad"} size="lg" />
+      </div>
+
+      {/* Mascot Speech/Encouragement Bubble */}
+      <div
+        className={`relative max-w-md rounded-lg border px-4 py-2.5 text-xs font-medium backdrop-blur sm:text-sm ${
+          passed
+            ? "border-energy/40 bg-card/85 text-foreground"
+            : "border-destructive/40 bg-card/85 text-foreground"
+        }`}
+      >
+        <span className="mb-1 block text-[10px] font-bold uppercase tracking-[.16em] text-energy">
+          {passed ? "Titan Mascot · Cheering" : "Titan Mascot · Encouragement"}
+        </span>
+        {passed
+          ? "Spectacular performance, Commander! Sector frequency stabilized and power restored to the Grid!"
+          : "Sector desynchronized! 80% mastery (4/5) is required to cross. Let's calibrate and retry!"}
+      </div>
+
+      <h1 className="display-font mt-5 text-3xl font-extrabold sm:text-5xl">
+        {passed ? `Sector 0${level.number} Restored!` : `Sector 0${level.number} Not Cleared`}
+      </h1>
+      <p className="mt-2 max-w-lg text-sm text-muted-foreground">
+        {passed
+          ? `${level.hero} has officially granted the ${level.shortTitle} power badge to your grid arsenal.`
+          : `Mastery requirement is 80% (4/5). Review the mission concepts and take another shot.`}
+      </p>
+
+      {/* Score Summary Box */}
+      <div className="mt-6 w-full max-w-md rounded-xl border border-border/80 bg-card/80 p-5 shadow-xl backdrop-blur">
+        <div className="flex items-center justify-between text-xs font-semibold">
+          <span className="uppercase tracking-[.12em] text-muted-foreground">Mission Score</span>
+          <span className={`text-base font-bold tabular-nums ${passed ? "text-hero-mint" : "text-destructive"}`}>
+            {score} / {totalQuestions} ({percentage}%)
+          </span>
+        </div>
+
+        {/* Progress bar with 80% mark indicator */}
+        <div className="relative mt-3 h-2.5 w-full overflow-hidden rounded-full bg-secondary">
+          <div
+            className={`h-full transition-all duration-700 ${passed ? "bg-hero-mint" : "bg-destructive"}`}
+            style={{ width: `${percentage}%` }}
+          />
+          <div
+            className="absolute bottom-0 top-0 w-0.5 bg-foreground/70"
+            style={{ left: "80%" }}
+            title="80% Pass mark"
+          />
+        </div>
+        <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
+          <span>0%</span>
+          <span className="font-semibold text-energy">80% Pass Threshold</span>
+          <span>100%</span>
+        </div>
+
+        {/* Star Rating Icons */}
+        <div className="mt-4 flex justify-center gap-2" aria-label={`Score: ${score} out of ${totalQuestions}`}>
+          {Array.from({ length: totalQuestions }).map((_, i) => (
+            <span
+              key={i}
+              className={`flex size-7 items-center justify-center rounded-sm border text-xs font-bold transition-transform ${
+                i < score
+                  ? "border-hero-gold/60 bg-hero-gold/20 text-hero-gold shadow-[0_0_10px_var(--hero-gold)] scale-105"
+                  : "border-border/60 bg-background/50 text-muted-foreground/30"
+              }`}
+            >
+              ★
+            </span>
+          ))}
+        </div>
+
+        {/* Hero Figure Chip */}
+        <div className="mt-5 flex items-center justify-between border-t border-border/60 pt-4 text-left">
+          <div className="flex items-center gap-3">
+            <span className={`flex size-9 items-center justify-center border text-sm ${hue.border} ${hue.text} bg-background/60`}>
+              {level.emblem}
+            </span>
+            <div>
+              <span className="block text-xs font-bold">{level.hero}</span>
+              <span className="block text-[10px] text-muted-foreground">{level.shortTitle}</span>
+            </div>
+          </div>
+          <span className={`text-[11px] font-bold uppercase tracking-[.12em] ${passed ? "text-hero-mint" : "text-muted-foreground"}`}>
+            {passed ? "Badge Earned" : "Badge Locked"}
+          </span>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+        {passed ? (
+          <>
+            {hasNextSector && nextLevel ? (
+              <Button
+                onClick={onNextSector}
+                className="h-12 gap-2.5 rounded-sm px-8 text-xs font-bold uppercase tracking-[.14em] shadow-[0_0_30px_color-mix(in_oklab,var(--primary)_40%,transparent)]"
+              >
+                <span>Next Sector · Sector 0{nextLevel.number}</span>
+                <ArrowRight className="size-4" />
+              </Button>
+            ) : (
+              <Button
+                onClick={onArena}
+                className="h-12 gap-2.5 rounded-sm bg-hero-gold px-8 text-xs font-bold uppercase tracking-[.14em] text-background shadow-[0_0_30px_color-mix(in_oklab,var(--hero-gold)_40%,transparent)] hover:bg-hero-gold/90"
+              >
+                <span>Enter Final Arena</span>
+                <ArrowRight className="size-4" />
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              onClick={onGrid}
+              className="h-12 gap-2 rounded-sm px-6 text-xs uppercase tracking-[.1em]"
+            >
+              <Shield className="size-4" />
+              <span>Sector Map</span>
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={onRetry}
+              className="h-12 gap-1.5 rounded-sm px-4 text-xs uppercase tracking-[.1em] text-muted-foreground hover:text-foreground"
+            >
+              <RotateCcw className="size-3.5" />
+              <span>Replay</span>
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              onClick={onRetry}
+              className="h-12 gap-2.5 rounded-sm px-8 text-xs font-bold uppercase tracking-[.14em] shadow-[0_0_30px_color-mix(in_oklab,var(--primary)_40%,transparent)]"
+            >
+              <RotateCcw className="size-4" />
+              <span>Retry Sector 0{level.number}</span>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={onGrid}
+              className="h-12 gap-2 rounded-sm px-6 text-xs uppercase tracking-[.1em]"
+            >
+              <Shield className="size-4" />
+              <span>Return to Grid</span>
+            </Button>
+          </>
+        )}
+      </div>
+    </section>
+  );
 }
 
 function ArenaStage({ question, index, selected, answered, retryUsed, arenaAnswers, onSelect, onSubmit, onAdvance }: { question: GameQuestion; index: number; selected: string[]; answered: boolean | null; retryUsed: boolean; arenaAnswers: boolean[]; onSelect: (answer: string) => void; onSubmit: () => void; onAdvance: () => void }) {
@@ -400,9 +654,78 @@ function ArenaStage({ question, index, selected, answered, retryUsed, arenaAnswe
   return <section className="sweep-in mx-auto max-w-3xl py-4"><div className="mb-6 flex items-center justify-between"><Button variant="ghost" onClick={() => window.history.back()} className="-ml-3 text-xs uppercase tracking-[.12em] text-muted-foreground"><ArrowLeft className="size-4" />Exit arena</Button><span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.15em] text-primary"><LockKeyhole className="size-4" />Final Assessment Arena</span></div><div className="mb-5 border border-primary/35 bg-primary/5 p-4"><div className="mb-2 flex justify-between text-xs"><span className="font-semibold">Mastery Meter</span><span className="tabular-nums text-primary">{mastery}%</span></div><Progress value={mastery} className="h-2 bg-secondary" /></div><div className="mb-4 flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-[.15em] text-energy">Arena Challenge · {question.id}</p><span className="text-xs tabular-nums text-muted-foreground">{index + 1} / 5</span></div><QuizStage level={levels[3]!} question={question} index={index} selected={selected} answered={answered} retryUsed={retryUsed} streak={0} onSelect={onSelect} onSubmit={onSubmit} onAdvance={onAdvance} /></section>;
 }
 
-function ArenaResults({ score, name, onName, onContinue }: { score: number; name: string; onName: (name: string) => void; onContinue: () => void }) {
+function ArenaResults({
+  score,
+  name,
+  onName,
+  onContinue,
+  onRetry,
+}: {
+  score: number;
+  name: string;
+  onName: (name: string) => void;
+  onContinue: () => void;
+  onRetry: () => void;
+}) {
   const passed = score >= ARENA_PASS_MARK;
-  return <section className="sweep-in mx-auto flex min-h-[68vh] max-w-3xl flex-col items-center justify-center py-8 text-center"><div className={`flex size-24 items-center justify-center rounded-full border ${passed ? "border-primary/60 bg-primary/10 text-primary" : "border-destructive/60 bg-destructive/10 text-destructive"}`}>{passed ? <Award className="size-12" /> : <RotateCcw className="size-10" />}</div><p className="mt-6 text-[10px] font-bold uppercase tracking-[.2em] text-primary">Final Assessment Arena</p><h1 className="display-font mt-2 text-4xl font-bold">{passed ? "Grid restored." : "The Arena awaits."}</h1><p className="mt-3 text-muted-foreground">Final score · <span className="font-bold text-foreground">{score}/5</span> · Pass mark 4/5</p>{passed ? <><p className="mt-3 max-w-lg text-sm leading-6 text-muted-foreground">The four sectors are joined. Enter your name for the Valuation Force Commander certificate.</p><Input value={name} onChange={(event) => onName(event.target.value)} maxLength={48} placeholder="Commander name" aria-label="Commander name for certificate" className="mt-6 max-w-sm rounded-sm border-border bg-card" /><Button onClick={onContinue} className="mt-4 rounded-sm px-7 text-xs font-bold uppercase tracking-[.12em]">View certificate<ArrowRight className="size-4" /></Button></> : <><p className="mt-3 max-w-lg text-sm leading-6 text-muted-foreground">Review the explanations and return to the Arena when ready.</p><Button onClick={onContinue} className="mt-6 rounded-sm px-7 text-xs font-bold uppercase tracking-[.12em]">Return to Grid<ArrowRight className="size-4" /></Button></>}</section>;
+  return (
+    <section className="sweep-in mx-auto flex min-h-[68vh] max-w-3xl flex-col items-center justify-center py-8 text-center">
+      <div
+        className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-bold uppercase tracking-[.18em] backdrop-blur ${
+          passed
+            ? "border-hero-mint/60 bg-hero-mint/15 text-hero-mint"
+            : "border-destructive/60 bg-destructive/15 text-destructive"
+        }`}
+      >
+        {passed ? <Check className="size-4" /> : <X className="size-4" />}
+        <span>{passed ? "Arena Cleared · 80%+" : "Arena Not Crossed · Below 80%"}</span>
+      </div>
+
+      <div className="relative mb-3 mt-6">
+        <MascotFigure mood={passed ? "happy" : "sad"} size="lg" />
+      </div>
+
+      <p className="text-[10px] font-bold uppercase tracking-[.2em] text-primary">Final Assessment Arena</p>
+      <h1 className="display-font mt-2 text-4xl font-bold">{passed ? "Grid Restored." : "The Arena Awaits."}</h1>
+      <p className="mt-3 text-muted-foreground">
+        Final score · <span className="font-bold text-foreground">{score}/5</span> ({Math.round((score / 5) * 100)}%) · Pass mark 4/5 (80%)
+      </p>
+
+      {passed ? (
+        <>
+          <p className="mt-3 max-w-lg text-sm leading-6 text-muted-foreground">
+            The four sectors are joined. Enter your name for the Valuation Force Commander certificate.
+          </p>
+          <Input
+            value={name}
+            onChange={(event) => onName(event.target.value)}
+            maxLength={48}
+            placeholder="Commander name"
+            aria-label="Commander name for certificate"
+            className="mt-6 max-w-sm rounded-sm border-border bg-card"
+          />
+          <Button onClick={onContinue} className="mt-4 rounded-sm px-7 text-xs font-bold uppercase tracking-[.12em]">
+            View certificate<ArrowRight className="size-4" />
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className="mt-3 max-w-lg text-sm leading-6 text-muted-foreground">
+            Review the sector concepts and give the Arena another run with freshly shuffled challenges.
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Button onClick={onRetry} className="gap-2 rounded-sm px-7 text-xs font-bold uppercase tracking-[.12em]">
+              <RotateCcw className="size-4" />
+              <span>Retry Arena</span>
+            </Button>
+            <Button variant="outline" onClick={onContinue} className="rounded-sm px-7 text-xs uppercase tracking-[.12em]">
+              <span>Return to Grid</span>
+            </Button>
+          </div>
+        </>
+      )}
+    </section>
+  );
 }
 
 function Certificate({ name, score, onBack, onDownload }: { name: string; score: number; onBack: () => void; onDownload: () => void }) {

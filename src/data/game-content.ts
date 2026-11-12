@@ -29,6 +29,32 @@ export const artwork = {
   arena: "/images/arena.webp",
 } as const;
 
+export function shuffleArray<T>(items: readonly T[]): T[] {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const temp = result[i]!;
+    result[i] = result[j]!;
+    result[j] = temp;
+  }
+  return result;
+}
+
+export function shuffleQuestion(question: GameQuestion): GameQuestion {
+  return {
+    ...question,
+    options: shuffleArray(question.options),
+  };
+}
+
+export function getShuffledQuestionsForLevel(level: GameLevel): GameQuestion[] {
+  return level.questions.map(shuffleQuestion);
+}
+
+export function getShuffledQuestionsForArena(): GameQuestion[] {
+  return arenaQuestions.map(shuffleQuestion);
+}
+
 const single = (
   id: string,
   stem: string,
@@ -38,7 +64,7 @@ const single = (
 ): GameQuestion => ({
   id,
   stem,
-  options: [correct, ...distractors],
+  options: shuffleArray([correct, ...distractors]),
   correctAnswers: [correct],
   explanation,
   type: "single",

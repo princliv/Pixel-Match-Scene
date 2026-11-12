@@ -34,10 +34,17 @@ export const createInitialProgress = (): GameProgress => ({
 });
 
 export const ARENA_PASS_MARK = 4;
+export const PASS_PERCENTAGE = 0.8;
+
+export function isLevelPassed(score: number, totalQuestions: number = 5): boolean {
+  if (totalQuestions <= 0) return false;
+  return score / totalQuestions >= PASS_PERCENTAGE;
+}
 
 export function recordLevelResult(progress: GameProgress, levelIndex: number, score: number): GameProgress {
   if (levelIndex < 0 || levelIndex >= levels.length || score < 0 || score > (levels[levelIndex]?.questions.length ?? 0)) return progress;
-  if (score < ARENA_PASS_MARK) {
+  const total = levels[levelIndex]?.questions.length ?? 5;
+  if (!isLevelPassed(score, total)) {
     const failedLevels = progress.levels.map((saved, index) =>
       index === levelIndex ? { ...saved, attempts: saved.attempts + 1, bestScore: Math.max(saved.bestScore, score) } : saved,
     );
